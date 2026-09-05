@@ -1,0 +1,53 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout4
+
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build native iPhone app
+        run: |
+          set -euxo pipefail
+          xcodebuild \
+            -project TinyVectorGarden.xcodeproj \
+            -scheme TinyVectorGarden \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euxo pipefail
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/TinyVectorGarden.app"
+          test -d "$APP_PATH"
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload TinyVectorGarden-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TinyVectorGarden-unsigned-ipa
+          path: TinyVectorGarden-unsigned.ipa
+          if-no-files-found: error
